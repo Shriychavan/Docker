@@ -1,0 +1,57 @@
+### command to build docker 
+### DOCKER_BUILDKIT=1 docker build --secret id=aws,src=$HOME/.aws/credentials -t <your-image-name>
+
+### Stage 1: Build the Spring Boot app using Maven
+FROM public.ecr.aws/docker/library/maven:3.9.9-amazoncorretto-21-alpine AS builder
+
+WORKDIR /app
+
+## Copy Maven configuration and download dependencies
+COPY ./pom.xml .
+
+## Copy the application source code
+COPY ./src ./src
+
+### Build the JAR
+RUN mvn clean package -DskipTests
+
+## Stage 2: Create runtime image
+# FROM public.ecr.aws/amazoncorretto/amazoncorretto:21.0.6-al2023-headless
+FROM public.ecr.aws/amazoncorretto/amazoncorretto:21
+
+# Create working directory
+WORKDIR /app
+
+#  Copy the built JAR from the builder stage
+COPY --from=builder ./app/target/anadg.emny-0.0.1-SNAPSHOT.jar ./anadg.emny-0.0.1-SNAPSHOT.jar
+
+# Create directory for the keystore
+#RUN mkdir -p /app/keystore
+
+#Install AWS CLI v2
+#RUN yum install -y unzip curl && \
+#    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+#    unzip awscliv2.zip && \
+#    ./aws/install && \
+#    rm -rf awscliv2.zip aws
+
+
+#Download SSL keystore from S3 using BuildKit secrets
+# RUN --mount=type=secret,id=aws,target=/root/.aws/credentials \
+#     aws s3 cp s3://kuber-dev-files/keystore/kuber-keystore.p12 /app/keystore
+
+#Copy the keystore file from host build context (must exist in app/keystore/)
+#COPY ./keystore/kuber-keystore.p12 /app/keystore/kuber-keystore.p12
+
+#Set correct permissions (optional but good practice)
+#RUN chmod 600 /app/keystore/kuber-keystore.p12
+
+#Copy entrypoint script
+#COPY docker-entrypoint.sh ./docker-entrypoint.sh
+#RUN chmod +x ./docker-entrypoint.sh
+
+EXPOSE 8080
+
+# Use the custom entrypoint that pulls the keystore from S3 and starts the app
+ENTRYPOINT ["java", "-jar", "anadg.emny-0.0.1-SNAPSHOT.jar"]
+#ENTRYPOINT ["./docker-entrypoint.sh"]
